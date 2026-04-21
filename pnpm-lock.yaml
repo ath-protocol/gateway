@@ -4,16 +4,19 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@ath-protocol/server>@ath-protocol/types': git+https://github.com/ath-protocol/typescript-sdk.git#path:/packages/types
+
 importers:
 
   .:
     dependencies:
       '@ath-protocol/server':
-        specifier: file:vendor/ath-sdk/packages/server
-        version: file:vendor/ath-sdk/packages/server
+        specifier: git+https://github.com/ath-protocol/typescript-sdk.git#path:/packages/server
+        version: https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/server(zod@3.25.76)
       '@ath-protocol/types':
-        specifier: file:vendor/ath-sdk/packages/types
-        version: link:vendor/ath-sdk/packages/types
+        specifier: git+https://github.com/ath-protocol/typescript-sdk.git#path:/packages/types
+        version: https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/types(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.19.14
         version: 1.19.14(hono@4.12.14)
@@ -110,9 +113,17 @@ importers:
 
 packages:
 
-  '@ath-protocol/server@file:vendor/ath-sdk/packages/server':
-    resolution: {directory: vendor/ath-sdk/packages/server, type: directory}
+  '@ath-protocol/server@https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/server':
+    resolution: {path: /packages/server, tarball: https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0}
+    version: 0.1.0
     engines: {node: '>=18'}
+
+  '@ath-protocol/types@https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/types':
+    resolution: {path: /packages/types, tarball: https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0}
+    version: 0.1.0
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
 
   '@esbuild/aix-ppc64@0.27.7':
     resolution: {integrity: sha512-EKX3Qwmhz1eMdEJokhALr0YiD0lhQNwDqkPYyPhiSwKrh7/4KRjQc04sZ8db+5DVVnZ1LmbNDI1uAMPEUBnQPg==}
@@ -709,11 +720,17 @@ packages:
 
 snapshots:
 
-  '@ath-protocol/server@file:vendor/ath-sdk/packages/server':
+  '@ath-protocol/server@https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/server(zod@3.25.76)':
     dependencies:
-      '@ath-protocol/types': link:vendor/ath-sdk/packages/types
+      '@ath-protocol/types': https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/types(zod@3.25.76)
       jose: 6.2.2
       openid-client: 6.8.3
+    transitivePeerDependencies:
+      - zod
+
+  '@ath-protocol/types@https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/types(zod@3.25.76)':
+    dependencies:
+      zod: 3.25.76
 
   '@esbuild/aix-ppc64@0.27.7':
     optional: true

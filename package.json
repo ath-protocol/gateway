@@ -12,8 +12,8 @@
     "test:e2e": "vitest run __tests__/e2e"
   },
   "dependencies": {
-    "@ath-protocol/server": "file:vendor/ath-sdk/packages/server",
-    "@ath-protocol/types": "file:vendor/ath-sdk/packages/types",
+    "@ath-protocol/server": "git+https://github.com/ath-protocol/typescript-sdk.git#path:/packages/server",
+    "@ath-protocol/types": "git+https://github.com/ath-protocol/typescript-sdk.git#path:/packages/types",
     "@hono/node-server": "^1.19.14",
     "hono": "^4.7.0",
     "jose": "^6.0.0",
@@ -24,5 +24,10 @@
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@ath-protocol/server>@ath-protocol/types": "git+https://github.com/ath-protocol/typescript-sdk.git#path:/packages/types"
+    }
   }
 }
