@@ -1,0 +1,28 @@
+{
+  "name": "ath-standalone-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone ATH gateway — multi-tenant, user accounts, admin-controlled providers. Uses @ath-protocol/server SDK for protocol primitives.",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:e2e": "vitest run __tests__/e2e"
+  },
+  "dependencies": {
+    "@ath-protocol/server": "file:vendor/ath-sdk/packages/server",
+    "@ath-protocol/types": "file:vendor/ath-sdk/packages/types",
+    "@hono/node-server": "^1.19.14",
+    "hono": "^4.7.0",
+    "jose": "^6.0.0",
+    "openid-client": "^6.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
