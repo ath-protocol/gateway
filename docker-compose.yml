@@ -1,15 +1,43 @@
 services:
+  mock-oauth:
+    build:
+      context: .
+      target: dev
+    image: ath-gateway:dev
+    container_name: ath-mock-oauth
+    command: ["pnpm", "exec", "tsx", "__tests__/support/mock-oauth/main.ts"]
+    environment:
+      PORT: "4000"
+      OAUTH_BASE_URL: "http://mock-oauth:4000"
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./__tests__:/app/__tests__
+      - ./scripts:/app/scripts
+      - ./package.json:/app/package.json
+      - ./pnpm-lock.yaml:/app/pnpm-lock.yaml
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./vitest.config.ts:/app/vitest.config.ts
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   gateway:
     build:
       context: .
       target: dev
     image: ath-gateway:dev
     container_name: ath-gateway
+    depends_on:
+      mock-oauth:
+        condition: service_healthy
     environment:
       ATH_PORT: "3000"
       ATH_HOST: "0.0.0.0"
       ATH_GATEWAY_HOST: "http://localhost:3000"
-      ATH_SIGNUP_ENABLED: "false"
+      ATH_SIGNUP_ENABLED: "true"
     ports:
       - "3000:3000"
     volumes:
@@ -22,7 +50,7 @@ services:
       - ./tsconfig.json:/app/tsconfig.json
       - ./vitest.config.ts:/app/vitest.config.ts
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 10s
       timeout: 3s
       retries: 5

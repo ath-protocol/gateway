@@ -1,1 +1,11 @@
-{}
+{
+  "mock": {
+    "display_name": "Mock OAuth",
+    "authorize_endpoint": "http://localhost:4000/authorize",
+    "token_endpoint": "http://mock-oauth:4000/token",
+    "api_base_url": "http://mock-oauth:4000",
+    "client_id": "ath-gateway-client",
+    "client_secret": "ath-gateway-secret",
+    "available_scopes": ["repo", "read:user", "user:email"]
+  }
+}
