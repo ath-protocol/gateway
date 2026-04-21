@@ -8,6 +8,7 @@
     "build": "tsc",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
+    "postinstall": "node scripts/build-ath-sdk-deps.mjs",
     "test": "vitest run",
     "test:e2e": "vitest run __tests__/e2e"
   },
