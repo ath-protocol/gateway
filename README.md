@@ -4,9 +4,17 @@ Standalone [ATH (Agent Trust Handshake)](https://github.com/ath-protocol/agent-t
 
 ## Quick start
 
+### Local (pnpm)
+
 ```bash
 pnpm install
 pnpm run dev
+```
+
+### Docker
+
+```bash
+docker compose up --build
 ```
 
 On first start a **root** admin account is created with a random password printed to stdout. Use it to log in at `http://localhost:3000/ui/dashboard`.
@@ -66,7 +74,7 @@ Authentication: pass session token via `X-ATH-User-Token` header, `ath_session` 
 pnpm test
 ```
 
-Runs 36 E2E tests (mock OAuth server included at `vendor/mock-oauth/`).
+Runs 36 E2E tests (mock OAuth server included at `__tests__/support/mock-oauth/`).
 
 ## Project structure
 
@@ -85,10 +93,15 @@ src/
 ├── providers/          # Provider store + admin routes
 ├── discovery/          # .well-known endpoint
 └── ui/                 # Dashboard web UI
-vendor/
-├── ath-sdk/            # @ath-protocol/server + types (from github.com/ath-protocol/typescript-sdk)
-└── mock-oauth/         # Mock OAuth2 server for E2E tests
+__tests__/
+├── e2e/                # End-to-end test suites
+└── support/
+    └── mock-oauth/     # Mock OAuth2 server used by E2E tests
+scripts/
+└── build-ath-sdk-deps.mjs  # Postinstall: fetches + builds @ath-protocol/* from github.com/ath-protocol/typescript-sdk
 ```
+
+The SDK packages `@ath-protocol/server` and `@ath-protocol/types` are installed directly from the [`ath-protocol/typescript-sdk`](https://github.com/ath-protocol/typescript-sdk) repository via `git+https://...#path:/packages/...` dependency URLs. A small `postinstall` script clones that repo once, builds it, and copies the resulting `dist/` into the installed packages so runtime imports resolve without a vendored copy.
 
 ## License
 

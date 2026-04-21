@@ -1,0 +1,28 @@
+services:
+  gateway:
+    build:
+      context: .
+      target: dev
+    image: ath-gateway:dev
+    container_name: ath-gateway
+    environment:
+      ATH_PORT: "3000"
+      ATH_HOST: "0.0.0.0"
+      ATH_GATEWAY_HOST: "http://localhost:3000"
+      ATH_SIGNUP_ENABLED: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./src:/app/src
+      - ./providers.json:/app/providers.json
+      - ./__tests__:/app/__tests__
+      - ./scripts:/app/scripts
+      - ./package.json:/app/package.json
+      - ./pnpm-lock.yaml:/app/pnpm-lock.yaml
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./vitest.config.ts:/app/vitest.config.ts
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5

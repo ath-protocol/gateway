@@ -13,10 +13,10 @@ importers:
     dependencies:
       '@ath-protocol/server':
         specifier: git+https://github.com/ath-protocol/typescript-sdk.git#path:/packages/server
-        version: https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/server(zod@3.25.76)
+        version: https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/server(zod@4.3.6)
       '@ath-protocol/types':
         specifier: git+https://github.com/ath-protocol/typescript-sdk.git#path:/packages/types
-        version: https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/types(zod@3.25.76)
+        version: https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/types(zod@4.3.6)
       '@hono/node-server':
         specifier: ^1.19.14
         version: 1.19.14(hono@4.12.14)
@@ -42,74 +42,6 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@22.19.17)(tsx@4.21.0)
-
-  vendor/ath-sdk/packages/client:
-    dependencies:
-      '@ath-protocol/types':
-        specifier: workspace:*
-        version: link:../types
-      jose:
-        specifier: ^6.0.0
-        version: 6.2.2
-    devDependencies:
-      '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.14)
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      hono:
-        specifier: ^4.7.0
-        version: 4.12.14
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/node@22.19.17)(tsx@4.21.0)
-      zod:
-        specifier: ^3.25.0
-        version: 3.25.76
-
-  vendor/ath-sdk/packages/server:
-    dependencies:
-      '@ath-protocol/types':
-        specifier: workspace:*
-        version: link:../types
-      jose:
-        specifier: ^6.0.0
-        version: 6.2.2
-      openid-client:
-        specifier: ^6.8.3
-        version: 6.8.3
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/node@22.19.17)(tsx@4.21.0)
-      zod:
-        specifier: ^3.25.0
-        version: 3.25.76
-
-  vendor/ath-sdk/packages/types:
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      tsx:
-        specifier: ^4.19.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      zod:
-        specifier: ^3.25.0
-        version: 3.25.76
 
 packages:
 
@@ -715,22 +647,22 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+  zod@4.3.6:
+    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
 
 snapshots:
 
-  '@ath-protocol/server@https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/server(zod@3.25.76)':
+  '@ath-protocol/server@https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/server(zod@4.3.6)':
     dependencies:
-      '@ath-protocol/types': https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/types(zod@3.25.76)
+      '@ath-protocol/types': https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/types(zod@4.3.6)
       jose: 6.2.2
       openid-client: 6.8.3
     transitivePeerDependencies:
       - zod
 
-  '@ath-protocol/types@https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/types(zod@3.25.76)':
+  '@ath-protocol/types@https://codeload.github.com/ath-protocol/typescript-sdk/tar.gz/c6348f9bd7a1d35c0517c23c51055a254a2bfeb0#path:/packages/types(zod@4.3.6)':
     dependencies:
-      zod: 3.25.76
+      zod: 4.3.6
 
   '@esbuild/aix-ppc64@0.27.7':
     optional: true
@@ -1202,4 +1134,4 @@ snapshots:
       siginfo: 2.0.0
       stackback: 0.0.2
 
-  zod@3.25.76: {}
+  zod@4.3.6: {}

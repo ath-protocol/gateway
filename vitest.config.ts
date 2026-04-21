@@ -4,6 +4,6 @@ export default defineConfig({
   test: {
     globals: true,
     testTimeout: 30000,
-    exclude: ["vendor/**", "node_modules/**"],
+    exclude: ["node_modules/**", "dist/**"],
   },
 });

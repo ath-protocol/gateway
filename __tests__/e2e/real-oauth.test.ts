@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { app as gatewayApp } from "../../src/app.js";
-import { app as oauthApp } from "../../vendor/mock-oauth/server.js";
+import { app as oauthApp } from "../support/mock-oauth/server.js";
 import { agentStore } from "../../src/registry/agent-store.js";
 import { tokenStore } from "../../src/auth/token.js";
 import { sessionStore } from "../../src/auth/session-store.js";
