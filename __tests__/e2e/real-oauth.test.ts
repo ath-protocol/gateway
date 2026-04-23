@@ -56,6 +56,7 @@ async function jsonReq(method: string, url: string, body?: unknown, headers?: Re
 describe("E2E with Real OAuth Server", () => {
   beforeAll(async () => {
     process.env.ATH_GATEWAY_HOST = GATEWAY_URL;
+    process.env.ATH_PUBLIC_GATEWAY_URL = GATEWAY_URL;
 
     agentStore.clear();
     tokenStore.clear();
@@ -95,6 +96,7 @@ describe("E2E with Real OAuth Server", () => {
   });
 
   afterAll(async () => {
+    delete process.env.ATH_PUBLIC_GATEWAY_URL;
     gatewayServer?.close();
     oauthServer?.close();
     agentStore.clear();

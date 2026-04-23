@@ -9,6 +9,12 @@ export interface GatewayConfig {
   port: number;
   host: string;
   gatewayUrl: string;
+  /**
+   * Base URL used in agent attestation JWT `aud` checks (authorize + token).
+   * Defaults to `gatewayUrl`. Set `ATH_PUBLIC_GATEWAY_URL` when the gateway is
+   * reached on a different host than OAuth redirect_uri (e.g. tests).
+   */
+  publicGatewayUrl: string;
   gatewaySecret: string;
   tokenExpirySeconds: number;
   sessionExpirySeconds: number;
@@ -43,10 +49,12 @@ export function loadConfig(): GatewayConfig {
     console.warn(`[config] ${missing.join(", ")} not set — using random ephemeral secret(s). Set in production.`);
   }
 
+  const gatewayUrl = process.env.ATH_GATEWAY_HOST || "http://localhost:3000";
   return {
     port: parseInt(process.env.ATH_PORT || "3000", 10),
     host: process.env.ATH_HOST || "0.0.0.0",
-    gatewayUrl: process.env.ATH_GATEWAY_HOST || "http://localhost:3000",
+    gatewayUrl,
+    publicGatewayUrl: process.env.ATH_PUBLIC_GATEWAY_URL || gatewayUrl,
     gatewaySecret: gw.value,
     tokenExpirySeconds: parseInt(process.env.ATH_TOKEN_EXPIRY || "3600", 10),
     sessionExpirySeconds: parseInt(process.env.ATH_SESSION_EXPIRY || "600", 10),

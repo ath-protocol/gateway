@@ -6,18 +6,14 @@ import { oauthBridge } from "../oauth/client.js";
 import { getAvailableProviders } from "../registry/policy.js";
 import { loadConfig } from "../config.js";
 import type { DiscoveryDocument } from "../types.js";
+import { getCachedDiscovery, setCachedDiscovery } from "./cache.js";
 
 export const discoveryRoutes = new Hono();
 
-let cachedDiscovery: DiscoveryDocument | null = null;
-let cacheExpiry = 0;
-const CACHE_TTL_MS = 5 * 60 * 1000;
-
 discoveryRoutes.get("/ath.json", async (c) => {
   const now = Date.now();
-  if (cachedDiscovery && now < cacheExpiry) {
-    return c.json(cachedDiscovery);
-  }
+  const hit = getCachedDiscovery(now);
+  if (hit) return c.json(hit);
 
   const config = loadConfig();
   const providers = await oauthBridge.listProviders();
@@ -37,8 +33,7 @@ discoveryRoutes.get("/ath.json", async (c) => {
     })),
   };
 
-  cachedDiscovery = discovery;
-  cacheExpiry = now + CACHE_TTL_MS;
+  setCachedDiscovery(discovery, now);
 
   return c.json(discovery);
 });

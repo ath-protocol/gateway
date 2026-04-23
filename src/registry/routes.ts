@@ -43,7 +43,7 @@ registryRoutes.post("/register", async (c) => {
 
   const config = loadConfig();
   const attestResult = await verifyAttestation(body.agent_attestation, {
-    audience: config.gatewayUrl,
+    audience: config.publicGatewayUrl,
     skipSignatureVerification: true,
   });
   if (!attestResult.valid) {

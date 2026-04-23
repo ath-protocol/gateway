@@ -41,7 +41,7 @@ authRoutes.post("/authorize", async (c) => {
   }
 
   const attestResult = await verifyAttestation(body.agent_attestation, {
-    audience: config.gatewayUrl,
+    audience: config.publicGatewayUrl,
     skipSignatureVerification: true,
   });
   if (!attestResult.valid) {
@@ -203,7 +203,7 @@ authRoutes.post("/token", async (c) => {
     throw new ATHError(ATHErrorCode.INVALID_ATTESTATION, jtiCheck.error, 401);
   }
 
-  const tokenEndpointUrl = `${config.gatewayUrl}/ath/token`;
+  const tokenEndpointUrl = `${config.publicGatewayUrl}/ath/token`;
   const attestResult = await verifyAttestation(body.agent_attestation, {
     audience: tokenEndpointUrl,
     skipSignatureVerification: true,
