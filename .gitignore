@@ -9,3 +9,4 @@ vendor/ath-sdk/packages/*/dist/
 # Environment
 .env
 .env.local
+_external/
