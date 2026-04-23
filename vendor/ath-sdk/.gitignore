@@ -24,3 +24,4 @@ ath.pptx
 
 # Dev output (internal design process artifacts)
 .dev-output/
+agent-trust-handshake-protocol/

@@ -19,7 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ath-protocol/types": "workspace:*",
+    "@ath-protocol/types": "file:../types",
     "jose": "^6.0.0",
     "openid-client": "^6.8.3"
   },

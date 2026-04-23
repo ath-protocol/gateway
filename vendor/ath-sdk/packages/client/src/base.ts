@@ -118,7 +118,9 @@ export abstract class ATHClientBase {
     }
 
     const attestation = await this.attest();
-    const state = crypto.randomUUID();
+    const stateBytes = new Uint8Array(16);
+    (globalThis.crypto ?? await import("node:crypto")).getRandomValues(stateBytes);
+    const state = Array.from(stateBytes, (b) => b.toString(16).padStart(2, "0")).join("");
 
     return this.request<AuthorizationResponse>("POST", this.athUrl("/ath/authorize"), {
       client_id: this.clientId,
@@ -136,10 +138,14 @@ export abstract class ATHClientBase {
       throw new ATHClientError("NOT_REGISTERED", "Agent not registered. Call register() first.");
     }
 
-    const res = await this.request<TokenResponse>("POST", this.athUrl("/ath/token"), {
+    const tokenEndpoint = this.athUrl("/ath/token");
+    const attestation = await this.attest(tokenEndpoint);
+
+    const res = await this.request<TokenResponse>("POST", tokenEndpoint, {
       grant_type: "authorization_code",
       client_id: this.clientId,
       client_secret: this.clientSecret,
+      agent_attestation: attestation,
       code,
       ath_session_id: sessionId,
     });
@@ -153,6 +159,7 @@ export abstract class ATHClientBase {
 
     await this.request("POST", this.athUrl("/ath/revoke"), {
       client_id: this.clientId,
+      client_secret: this.clientSecret,
       token: this.currentToken,
     });
 

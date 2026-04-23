@@ -16,7 +16,7 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@ath-protocol/types": "workspace:*",
+    "@ath-protocol/types": "file:../types",
     "jose": "^6.0.0"
   },
   "devDependencies": {

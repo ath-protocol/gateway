@@ -12,6 +12,9 @@ export async function signAttestation(opts: {
   keyId: string;
   audience: string;
 }): Promise<string> {
+  const jti = globalThis.crypto?.randomUUID?.()
+    ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
   return new SignJWT({ capabilities: [] })
     .setProtectedHeader({ alg: "ES256", kid: opts.keyId })
     .setIssuer(opts.agentId)
@@ -19,5 +22,6 @@ export async function signAttestation(opts: {
     .setAudience(opts.audience)
     .setIssuedAt()
     .setExpirationTime("1h")
+    .setJti(jti)
     .sign(opts.privateKey);
 }

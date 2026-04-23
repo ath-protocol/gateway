@@ -11,8 +11,10 @@ import { providerStore } from "../../src/providers/store.js";
 import { userStore } from "../../src/users/store.js";
 import { createSessionToken } from "../../src/users/middleware.js";
 import * as jose from "jose";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { clearJtiReplayStore } from "../../src/auth/jti-replay.js";
 
 const BASE = "http://localhost";
 
@@ -51,13 +53,14 @@ async function req(method: string, path: string, body?: unknown, headers?: Recor
   return app.request(path, init);
 }
 
-async function generateAttestation(agentId: string): Promise<string> {
+async function generateAttestation(agentId: string, audience?: string): Promise<string> {
   const { privateKey } = await jose.generateKeyPair("ES256");
   return new jose.SignJWT({ capabilities: [] })
     .setProtectedHeader({ alg: "ES256", kid: "test-key" })
     .setIssuer(agentId)
     .setSubject(agentId)
-    .setAudience("http://localhost:3000")
+    .setAudience(audience ?? "http://localhost:3000")
+    .setJti(crypto.randomUUID())
     .setIssuedAt()
     .setExpirationTime("1h")
     .sign(privateKey);
@@ -68,6 +71,7 @@ describe("E2E-0: User Authentication", () => {
     agentStore.clear();
     tokenStore.clear();
     sessionStore.clear();
+    clearJtiReplayStore();
     resetProviders();
     userStore.clear();
     authToken = "";
@@ -110,6 +114,7 @@ describe("E2E-1: Agent registers and accesses a service (Happy Path)", () => {
     agentStore.clear();
     tokenStore.clear();
     sessionStore.clear();
+    clearJtiReplayStore();
     resetProviders();
     await ensureTestUser();
   });
@@ -178,10 +183,12 @@ describe("E2E-1: Agent registers and accesses a service (Happy Path)", () => {
   });
 
   it("Step 5: Agent exchanges code for ATH token with scope intersection", async () => {
+    const tokenAttestation = await generateAttestation(agentId, "http://localhost:3000/ath/token");
     const res = await req("POST", "/ath/token", {
       grant_type: "authorization_code",
       client_id: clientId,
       client_secret: clientSecret,
+      agent_attestation: tokenAttestation,
       code: "mock_code_e2e",
       ath_session_id: sessionId,
     });
@@ -219,6 +226,7 @@ describe("E2E-2: Trusted Handshake Enforcement (Scope Restriction)", () => {
     agentStore.clear();
     tokenStore.clear();
     sessionStore.clear();
+    clearJtiReplayStore();
     resetProviders();
     await ensureTestUser();
   });
@@ -253,7 +261,6 @@ describe("E2E-2: Trusted Handshake Enforcement (Scope Restriction)", () => {
       agent_attestation: attestation,
       provider_id: "github",
       scopes: ["repo", "admin:org"],
-      user_redirect_uri: "http://localhost/callback",
       state: "test",
     });
     expect(res.status).toBe(403);
@@ -268,7 +275,6 @@ describe("E2E-2: Trusted Handshake Enforcement (Scope Restriction)", () => {
       agent_attestation: attestation,
       provider_id: "github",
       scopes: ["repo"],
-      user_redirect_uri: "http://localhost:3000/ath/callback",
       state: "test",
     });
     expect(res.status).toBe(200);
@@ -286,6 +292,7 @@ describe("E2E-2: Trusted Handshake Enforcement (Scope Restriction)", () => {
 describe("E2E-3: Unapproved Agent Rejected", () => {
   beforeAll(async () => {
     agentStore.clear();
+    clearJtiReplayStore();
     await ensureTestUser();
   });
 
@@ -296,7 +303,6 @@ describe("E2E-3: Unapproved Agent Rejected", () => {
       agent_attestation: attestation,
       provider_id: "github",
       scopes: ["repo"],
-      user_redirect_uri: "http://localhost/callback",
       state: "test",
     });
     expect(res.status).toBe(403);
@@ -314,6 +320,7 @@ describe("E2E-4: Token Revocation", () => {
     agentStore.clear();
     tokenStore.clear();
     sessionStore.clear();
+    clearJtiReplayStore();
     resetProviders();
     await ensureTestUser();
   });
@@ -343,7 +350,6 @@ describe("E2E-4: Token Revocation", () => {
       agent_attestation: authAttestation,
       provider_id: "github",
       scopes: ["repo"],
-      user_redirect_uri: "http://localhost:3000/ath/callback",
       state: "test",
     });
     const authData = await authRes.json() as any;
@@ -351,10 +357,12 @@ describe("E2E-4: Token Revocation", () => {
     const session = await sessionStore.get(authData.ath_session_id);
     await req("GET", `/ath/callback?code=mock_code&state=${session!.oauth_state}`);
 
+    const tokenAttestation = await generateAttestation(agentId, "http://localhost:3000/ath/token");
     const tokenRes = await req("POST", "/ath/token", {
       grant_type: "authorization_code",
       client_id: clientId,
       client_secret: clientSecret,
+      agent_attestation: tokenAttestation,
       code: "mock_code",
       ath_session_id: authData.ath_session_id,
     });
@@ -370,6 +378,7 @@ describe("E2E-4: Token Revocation", () => {
   it("Revoke token", async () => {
     const res = await req("POST", "/ath/revoke", {
       client_id: clientId,
+      client_secret: clientSecret,
       token: accessToken,
     });
     expect(res.status).toBe(200);
@@ -396,6 +405,7 @@ describe("E2E-5: Proxy rejects mismatched agent/provider", () => {
     agentStore.clear();
     tokenStore.clear();
     sessionStore.clear();
+    clearJtiReplayStore();
     resetProviders();
     await ensureTestUser();
   });
@@ -421,7 +431,6 @@ describe("E2E-5: Proxy rejects mismatched agent/provider", () => {
       agent_attestation: authAttestation,
       provider_id: "github",
       scopes: ["repo"],
-      user_redirect_uri: "http://localhost:3000/ath/callback",
       state: "test",
     });
     const authData = await authRes.json() as any;
@@ -429,10 +438,12 @@ describe("E2E-5: Proxy rejects mismatched agent/provider", () => {
     const session = await sessionStore.get(authData.ath_session_id);
     await req("GET", `/ath/callback?code=mock_code&state=${session!.oauth_state}`);
 
+    const tokenAttestation = await generateAttestation(agentId, "http://localhost:3000/ath/token");
     const tokenRes = await req("POST", "/ath/token", {
       grant_type: "authorization_code",
       client_id: regData.client_id,
       client_secret: regData.client_secret,
+      agent_attestation: tokenAttestation,
       code: "mock_code",
       ath_session_id: authData.ath_session_id,
     });
@@ -475,6 +486,7 @@ describe("E2E-6: Cross-tenant isolation", () => {
     agentStore.clear();
     tokenStore.clear();
     sessionStore.clear();
+    clearJtiReplayStore();
     userStore.clear();
 
     const userA = await userStore.create("alice", "passA", "user");

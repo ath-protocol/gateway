@@ -1,6 +1,6 @@
 // Auto-generated from ATH Protocol JSON Schema — DO NOT EDIT
 // Source: https://raw.githubusercontent.com/ath-protocol/agent-trust-handshake-protocol/refs/heads/main/schema/0.1/schema.json
-// Generated: 2026-04-20
+// Generated: 2026-04-23
 
 /** Gateway discovery document returned by GET /.well-known/ath.json. Lists available providers and the agent registration endpoint. */
 export interface DiscoveryDocument {
@@ -88,14 +88,14 @@ export interface DeveloperInfo {
 export interface AgentRegistrationRequest {
   /** The agent's canonical URI. */
   agent_id: string;
-  /** Signed JWT (ES256) proving agent identity. Must include exp, aud, iss, sub claims. */
+  /** Signed JWT (ES256) proving agent identity. MUST include iss, sub, aud, iat, exp, and jti claims. The jti MUST be unique per attestation and implementors MUST reject replayed jti values. */
   agent_attestation: string;
   developer: DeveloperInfo;
   /** Providers and scopes the agent is requesting access to. */
   requested_providers: ProviderScopeRequest[];
   /** Human-readable description of the agent's purpose. */
   purpose?: string;
-  /** OAuth callback URIs for this agent. */
+  /** OAuth callback URIs for this agent. If provided, the implementor MUST validate user_redirect_uri against this list using exact-match comparison during authorization. If omitted (e.g., for local agents without a public endpoint), the implementor MUST reject any authorization request that includes a user_redirect_uri, and the OAuth callback MUST be handled entirely by the implementor without redirecting to the agent. */
   redirect_uris?: string[];
 }
 
@@ -148,8 +148,8 @@ export interface AuthorizationRequest {
   scopes: string[];
   /** Where to redirect the user after OAuth consent. */
   user_redirect_uri?: string;
-  /** Opaque state parameter for CSRF protection. */
-  state?: string;
+  /** Opaque state parameter for CSRF protection. MUST be generated from a CSPRNG with at least 128 bits of entropy. The implementor MUST validate state on the OAuth callback and reject mismatches. */
+  state: string;
   /** Target resource server URI. Optional, per RFC 8707 (Resource Indicators). */
   resource?: string;
 }
@@ -170,6 +170,8 @@ export interface TokenExchangeRequest {
   client_id: string;
   /** The agent's client_secret. */
   client_secret: string;
+  /** Fresh signed JWT proving current possession of the agent's private key. The attestation sub claim MUST match the client_id's registered agent_id. The aud claim MUST be set to the token endpoint URL. */
+  agent_attestation: string;
   /** OAuth authorization code from the callback. */
   code: string;
   /** Session ID from the authorization step. */
@@ -203,10 +205,12 @@ export interface ScopeIntersection {
   effective: string[];
 }
 
-/** Request body for POST /ath/revoke. Immediately invalidates an ATH access token. */
+/** Request body for POST /ath/revoke. Immediately invalidates an ATH access token. When called by an agent, client_secret is required for authentication per RFC 7009. Users and administrators authenticate through the implementor's own mechanism (e.g., session cookie, admin API key) and are not required to provide client_secret. */
 export interface TokenRevocationRequest {
-  /** The agent's client_id. */
-  client_id: string;
+  /** The agent's client_id. Required when the caller is the agent. */
+  client_id?: string;
+  /** The agent's client_secret. Required when the caller is the agent, for client authentication per RFC 7009. */
+  client_secret?: string;
   /** The ATH access token to revoke. */
   token: string;
 }

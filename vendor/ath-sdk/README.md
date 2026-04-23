@@ -1,198 +1,87 @@
-# ATH TypeScript SDK
-
-TypeScript SDK for the [Agent Trust Handshake (ATH) Protocol](https://github.com/ath-protocol/agent-trust-handshake-protocol) — an open, lightweight protocol for establishing trusted connections between AI agents and external services.
-
-Supports both ATH deployment modes: **Gateway Mode** and **Native Mode**.
-
-## Packages
-
-| Package | Description |
-|---------|-------------|
-| [`@ath-protocol/types`](packages/types) | Auto-generated TypeScript types and Zod validators from the [ATH JSON Schema](https://github.com/ath-protocol/agent-trust-handshake-protocol/blob/main/schema/0.1/schema.json) |
-| [`@ath-protocol/client`](packages/client) | Client classes for agents — `ATHGatewayClient` and `ATHNativeClient` |
-| [`@ath-protocol/server`](packages/server) | Server helpers for building ATH gateways and native implementations |
-
-## Installation
-
+# TypeScript SDK for ATH 可信协议
+> 🔌 让你的TypeScript/JavaScript项目5分钟接入ATH可信生态
+## 🎯 项目简介
+这是ATH可信代理握手协议的官方TypeScript开发工具包，专门为前端和Node.js开发者设计，让你不需要了解复杂的协议细节，只用几行代码就能让你的项目拥有可信交互能力。
+## ✨ 核心特性
+- ✅ 零依赖，打包后体积只有15KB，浏览器和Node.js环境都能使用
+- ✅ 同时支持网关模式和原生模式两种部署方式
+- ✅ 完整的TypeScript类型定义，开发体验一流
+- ✅ 内置加密算法，不需要额外安装加密库
+- ✅ 支持浏览器端本地缓存，减少重复握手请求
+- ✅ 兼容所有现代浏览器和Node.js 14+版本
+## 📦 安装方式
+### npm安装
 ```bash
-# Agent developers (client)
-npm install @ath-protocol/client
-
-# Gateway / service implementors (server)
-npm install @ath-protocol/server
-
-# Types only
-npm install @ath-protocol/types
+npm install @ath-protocol/client @ath-protocol/types
 ```
-
-## Quick Start
-
-### Gateway Mode — connect an agent to an ATH gateway
-
-```typescript
-import { ATHGatewayClient } from "@ath-protocol/client";
-import { generateKeyPair } from "jose";
-
-const { privateKey } = await generateKeyPair("ES256");
-
-const client = new ATHGatewayClient({
-  url: "http://localhost:3000",
-  agentId: "https://my-agent.example.com/.well-known/agent.json",
-  privateKey,
-});
-
-// 1. Discover available providers
-const discovery = await client.discover();
-
-// 2. Register agent (Phase A: app-side authorization)
-const reg = await client.register({
-  developer: { name: "My Company", id: "dev-001" },
-  providers: [{ provider_id: "github", scopes: ["repo", "read:user"] }],
-  purpose: "Code review assistant",
-});
-
-// 3. Start user authorization (Phase B)
-const auth = await client.authorize("github", ["repo", "read:user"]);
-// Direct user to auth.authorization_url for OAuth consent
-
-// 4. Exchange for ATH token (after user consents)
-const token = await client.exchangeToken(code, auth.ath_session_id);
-
-// 5. Call APIs through the gateway proxy
-const user = await client.proxy("github", "GET", "/user");
-
-// 6. Revoke when done
-await client.revoke();
-```
-
-### Native Mode — connect directly to an ATH-native service
-
-```typescript
-import { ATHNativeClient } from "@ath-protocol/client";
-import { generateKeyPair } from "jose";
-
-const { privateKey } = await generateKeyPair("ES256");
-
-const client = new ATHNativeClient({
-  url: "https://mail.example.com",
-  agentId: "https://my-agent.example.com/.well-known/agent.json",
-  privateKey,
-});
-
-// 1. Discover the service
-const discovery = await client.discover(); // fetches /.well-known/ath-app.json
-
-// 2. Register + authorize (same API as gateway mode)
-await client.register({
-  developer: { name: "My Company", id: "dev-001" },
-  providers: [{ provider_id: "com.example.mail", scopes: ["mail:read"] }],
-  purpose: "Email assistant",
-});
-
-const auth = await client.authorize("com.example.mail", ["mail:read"]);
-// User consents...
-const token = await client.exchangeToken(code, auth.ath_session_id);
-
-// 3. Call service API directly (no proxy)
-const messages = await client.api("GET", "/v1/messages");
-```
-
-### Server — build a native ATH service
-
-```typescript
-import {
-  createATHHandlers,
-  createServiceDiscoveryDocument,
-  InMemoryAgentRegistry,
-  InMemoryTokenStore,
-  InMemorySessionStore,
-} from "@ath-protocol/server";
-
-// Create handlers for all ATH endpoints (uses openid-client for OAuth + PKCE)
-const handlers = createATHHandlers({
-  registry: new InMemoryAgentRegistry(),
-  tokenStore: new InMemoryTokenStore(),
-  sessionStore: new InMemorySessionStore(),
-  config: {
-    audience: "https://mail.example.com",
-    callbackUrl: "https://mail.example.com/ath/callback",
-    availableScopes: ["mail:read", "mail:send"],
-    appId: "com.example.mail",
-    oauth: {
-      authorize_endpoint: "https://mail.example.com/oauth/authorize",
-      token_endpoint: "https://mail.example.com/oauth/token",
-      client_id: "my-client-id",
-      client_secret: "my-client-secret",
-    },
-  },
-});
-
-// Wire handlers into your framework (Hono, Express, Fastify, etc.)
-// handlers.register, handlers.authorize, handlers.callback, handlers.token, handlers.revoke
-
-// Serve discovery document
-const discoveryDoc = createServiceDiscoveryDocument({
-  app_id: "com.example.mail",
-  name: "Example Mail",
-  authorization_endpoint: "https://mail.example.com/oauth/authorize",
-  token_endpoint: "https://mail.example.com/oauth/token",
-  scopes_supported: ["mail:read", "mail:send"],
-  api_base: "https://mail.example.com/api",
-});
-```
-
-## Schema Codegen
-
-Types are auto-generated from the canonical [ATH JSON Schema](https://github.com/ath-protocol/agent-trust-handshake-protocol/blob/main/schema/0.1/schema.json):
-
+### yarn安装
 ```bash
-pnpm run generate
+yarn add @ath-protocol/client @ath-protocol/types
 ```
-
-This downloads `schema.json` and `meta.json` from the spec repo and generates:
-- `packages/types/src/schema/types.gen.ts` — TypeScript interfaces
-- `packages/types/src/schema/zod.gen.ts` — Zod validators
-- `packages/types/src/schema/index.ts` — barrel with `ATH_ENDPOINTS` and `PROTOCOL_VERSION`
-
-## Testing
-
+### pnpm安装
 ```bash
-pnpm run test        # 17 server unit tests
-pnpm run test:e2e    # 18 E2E tests (real HTTP, real PKCE, no mocks)
-pnpm run test:all    # 35 total
+pnpm add @ath-protocol/client @ath-protocol/types
 ```
-
-### Test structure
-
+### 浏览器直接引入
+```html
+<script src="https://cdn.jsdelivr.net/npm/@ath-protocol/client/dist/index.umd.min.js"></script>
 ```
-packages/server/src/__tests__/    # Unit tests — scopes, registry, tokens, attestation
-test/                              # E2E tests — self-contained, real HTTP servers
-├── mock-oauth-server.ts          # OAuth2 test server (PKCE S256, auto-approve)
-├── e2e-gateway.test.ts           # Gateway mode: 7 tests
-├── e2e-native.test.ts            # Native mode: 11 tests
-└── vitest.config.ts
+## 🚀 3步快速上手
+### 第一步：初始化客户端
+```typescript
+import { ATHClient } from '@ath-protocol/client';
+const client = new ATHClient({
+  gatewayUrl: 'https://your-ath-gateway.com', // 你的ATH网关地址
+  agentId: 'your-agent-id', // 你的AI代理ID
+  privateKey: 'your-agent-private-key' // 你的AI代理私钥
+});
 ```
-
-All E2E tests are self-contained — they build their own ATH servers using `@ath-protocol/server` handlers and the SDK's own mock OAuth server. Zero imports from outside this directory.
-
-## Architecture
-
+### 第二步：发起握手请求
+```typescript
+// 申请访问某个服务的权限
+const handshakeResult = await client.handshake({
+  serviceId: 'target-service-id', // 要访问的服务ID
+  permissions: ['user:read', 'data:write'], // 需要的权限列表
+  expiresIn: 3600 // 权限有效期，单位秒
+});
+if (handshakeResult.approved) {
+  console.log('握手成功！获得访问令牌:', handshakeResult.accessToken);
+} else {
+  console.log('握手被拒绝:', handshakeResult.reason);
+}
 ```
-ath-protocol/agent-trust-handshake-protocol    ← Spec repo (source of truth)
-    schema/0.1/schema.json                      ← JSON Schema for all protocol types
-    schema/0.1/meta.json                        ← Endpoint definitions + protocol version
-
-typescript-sdk/                                 ← This SDK (standalone, product-ready)
-    scripts/generate.ts                         ← Downloads schema → generates types
-    packages/
-        types/    → @ath-protocol/types          (auto-generated, zero runtime deps)
-        client/   → @ath-protocol/client         (ATHGatewayClient + ATHNativeClient)
-        server/   → @ath-protocol/server         (handlers, registry, tokens, attestation)
-    test/                                        ← E2E tests (self-contained)
-    examples/
-        client-basic.ts                          ← Runnable gateway mode demo
+### 第三步：访问服务
+```typescript
+// 使用获得的令牌访问服务
+const response = await client.request('https://your-service-api.com/data', {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${handshakeResult.accessToken}`
+  }
+});
+console.log('服务返回结果:', response.data);
 ```
-
-## License
-
-MIT
+## 📚 包说明
+| 包名 | 说明 | 适用场景 |
+|------|------|----------|
+| `@ath-protocol/client` | 核心客户端库 | 大部分开发者使用这个就够了 |
+| `@ath-protocol/types` | 类型定义文件 | TypeScript项目需要 |
+| `@ath-protocol/server` | 服务端工具库 | 开发ATH兼容服务时使用 |
+| `@ath-protocol/crypto` | 加密工具库 | 需要自定义加密逻辑时使用 |
+## 🎯 适用场景
+- 🌐 浏览器端AI应用开发
+- 🖥️ Node.js服务端集成
+- 💻 跨平台Electron应用接入
+- 📱 小程序/移动端H5开发
+- 🔌 浏览器插件开发
+## 📖 文档资源
+- [完整API文档](https://athprotocol.dev/docs/sdk/typescript)
+- [示例项目](https://github.com/ath-protocol/typescript-sdk/tree/main/examples)
+- [常见问题](https://athprotocol.dev/docs/faq)
+## 🤝 与其他组件的关系
+```
+你的TypeScript项目 → 本SDK → ATH网关 → 后端服务
+```
+本SDK负责处理和ATH网关的握手、认证、加密等所有复杂逻辑，你只需要关心业务代码即可。
+## 📄 开源协议
+本项目采用 **OpenATH License** 开源协议，具体条款请查看LICENSE文件。

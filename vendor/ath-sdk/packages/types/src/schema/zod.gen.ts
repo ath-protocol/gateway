@@ -1,6 +1,6 @@
 // Auto-generated Zod validators from ATH Protocol JSON Schema — DO NOT EDIT
 // Source: https://raw.githubusercontent.com/ath-protocol/agent-trust-handshake-protocol/refs/heads/main/schema/0.1/schema.json
-// Generated: 2026-04-20
+// Generated: 2026-04-23
 
 import { z } from "zod";
 
@@ -89,7 +89,7 @@ export const zAuthorizationRequest = z.object({
   provider_id: z.string(),
   scopes: z.array(z.string()),
   user_redirect_uri: z.string().url().optional(),
-  state: z.string().optional(),
+  state: z.string(),
   resource: z.string().url().optional(),
 });
 
@@ -102,6 +102,7 @@ export const zTokenExchangeRequest = z.object({
   grant_type: z.literal("authorization_code"),
   client_id: z.string(),
   client_secret: z.string(),
+  agent_attestation: z.string(),
   code: z.string(),
   ath_session_id: z.string(),
 });
@@ -123,7 +124,8 @@ export const zTokenResponse = z.object({
 });
 
 export const zTokenRevocationRequest = z.object({
-  client_id: z.string(),
+  client_id: z.string().optional(),
+  client_secret: z.string().optional(),
   token: z.string(),
 });
 

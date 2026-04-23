@@ -1,0 +1,23 @@
+{
+  "name": "atum-marketplace",
+  "owner": {
+    "name": "system"
+  },
+  "metadata": {
+    "description": "Auto-dev platform: structured workflows for dev agents, simulated user testing, requirements elicitation, and issue triage",
+    "version": "5.0.0"
+  },
+  "plugins": [
+    {
+      "name": "zero-review",
+      "source": "./",
+      "description": "Auto-dev platform for agent-majority software teams. Four skills (auto-dev, auto-req, auto-test, auto-triage), three roles (dev-agent, user-agent, triage-agent), and cross-skill contracts. Humans supply requirements and intervene at key decision points; agents handle everything else.",
+      "version": "5.0.0",
+      "author": {
+        "name": "system"
+      },
+      "keywords": ["auto-dev", "agent-orchestration", "software-engineering", "multi-agent", "test-driven", "requirements", "triage"],
+      "category": "development"
+    }
+  ]
+}

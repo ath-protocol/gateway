@@ -14,30 +14,51 @@ import { ATHGatewayClient } from "../packages/client/src/gateway.js";
 import { ATHClientError } from "../packages/client/src/errors.js";
 import {
   createATHHandlers,
+  createProxyHandler,
   InMemoryAgentRegistry,
   InMemoryTokenStore,
   InMemorySessionStore,
+  InMemoryProviderTokenStore,
 } from "../packages/server/src/index.js";
 import { createMockOAuthServer } from "./mock-oauth-server.js";
 
 const OAUTH_PORT = 18000;
 const GATEWAY_PORT = 18001;
+const UPSTREAM_PORT = 18002;
 const OAUTH_URL = `http://localhost:${OAUTH_PORT}`;
 const GATEWAY_URL = `http://localhost:${GATEWAY_PORT}`;
+const UPSTREAM_URL = `http://localhost:${UPSTREAM_PORT}`;
 const CLIENT_ID = "ath-gw-test-client";
 const CLIENT_SECRET = "ath-gw-test-secret";
 
 let oauthServer: ServerType;
 let gatewayServer: ServerType;
+let upstreamServer: ServerType;
+let lastUpstreamAuth: string | undefined;
+
+function buildUpstreamService() {
+  const app = new Hono();
+  app.get("/health", (c) => c.json({ status: "ok" }));
+  app.get("/userinfo", (c) => {
+    lastUpstreamAuth = c.req.header("Authorization");
+    return c.json({ login: "test-user", name: "Test User", email: "test@example.com" });
+  });
+  app.get("/api/repos", (c) => {
+    lastUpstreamAuth = c.req.header("Authorization");
+    return c.json([{ id: 1, name: "ath-gateway", full_name: "test-user/ath-gateway" }]);
+  });
+  return app;
+}
 
 function buildGatewayService() {
   const app = new Hono();
   const registry = new InMemoryAgentRegistry();
   const tokenStore = new InMemoryTokenStore();
   const sessionStore = new InMemorySessionStore();
+  const providerTokenStore = new InMemoryProviderTokenStore();
 
   const handlers = createATHHandlers({
-    registry, tokenStore, sessionStore,
+    registry, tokenStore, sessionStore, providerTokenStore,
     config: {
       audience: GATEWAY_URL,
       callbackUrl: `${GATEWAY_URL}/ath/callback`,
@@ -89,29 +110,29 @@ function buildGatewayService() {
     return c.json(r.body, r.status as any);
   });
 
-  // Proxy endpoint — validates ATH token, then returns service responses.
-  // In a real gateway, this would forward to an upstream provider using the stored
-  // OAuth token. Here we validate the ATH token and serve mock responses.
-  app.all("/ath/proxy/:provider/*", async (c) => {
-    const authHeader = c.req.header("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return c.json({ code: "TOKEN_INVALID", message: "Missing token" }, 401);
-    const token = authHeader.slice(7);
-    const bound = await tokenStore.get(token);
-    if (!bound) return c.json({ code: "TOKEN_INVALID", message: "Invalid token" }, 401);
-    if (bound.revoked) return c.json({ code: "TOKEN_REVOKED", message: "Token revoked" }, 401);
-    const provider = c.req.param("provider");
-    if (bound.provider_id !== provider) return c.json({ code: "PROVIDER_MISMATCH", message: "Token not for this provider" }, 403);
-    const agentIdHeader = c.req.header("X-ATH-Agent-ID");
-    if (agentIdHeader && agentIdHeader !== bound.agent_id) return c.json({ code: "AGENT_IDENTITY_MISMATCH", message: "Agent mismatch" }, 403);
+  const proxy = createProxyHandler({
+    tokenStore,
+    providerTokenStore,
+    upstreams: { github: UPSTREAM_URL },
+  });
 
-    const path = c.req.path.replace(`/ath/proxy/${provider}`, "");
-    if (path === "/userinfo") {
-      return c.json({ login: "test-user", name: "Test User", email: "test@example.com" });
+  app.all("/ath/proxy/:provider/*", async (c) => {
+    const headers: Record<string, string> = {};
+    c.req.raw.headers.forEach((v, k) => { headers[k] = v; });
+    const query: Record<string, string> = {};
+    for (const [k, v] of Object.entries(c.req.query())) { if (v) query[k] = v; }
+    let body: unknown = undefined;
+    if (c.req.method !== "GET" && c.req.method !== "HEAD") {
+      try { body = await c.req.json(); } catch { body = undefined; }
     }
-    if (path === "/api/repos") {
-      return c.json([{ id: 1, name: "ath-gateway", full_name: "test-user/ath-gateway" }]);
-    }
-    return c.json({ mock: true, provider, path });
+    const r = await proxy({ method: c.req.method, path: c.req.path, headers, query, body });
+    const out = new Response(
+      typeof r.body === "string" || r.body instanceof ArrayBuffer
+        ? (r.body as BodyInit)
+        : JSON.stringify(r.body),
+      { status: r.status, headers: r.headers },
+    );
+    return out;
   });
 
   return app;
@@ -123,15 +144,17 @@ describe("ATHGatewayClient E2E — self-contained, real HTTP", () => {
   beforeAll(async () => {
     const oauthApp = createMockOAuthServer({ clientId: CLIENT_ID, clientSecret: CLIENT_SECRET, baseUrl: OAUTH_URL });
     oauthServer = serve({ fetch: oauthApp.fetch, port: OAUTH_PORT, hostname: "127.0.0.1" });
+    upstreamServer = serve({ fetch: buildUpstreamService().fetch, port: UPSTREAM_PORT, hostname: "127.0.0.1" });
     gatewayServer = serve({ fetch: buildGatewayService().fetch, port: GATEWAY_PORT, hostname: "127.0.0.1" });
 
     for (let i = 0; i < 20; i++) {
       try {
-        const [g, o] = await Promise.all([
+        const [g, o, u] = await Promise.all([
           fetch(`${GATEWAY_URL}/health`).then(r => r.ok),
           fetch(`${OAUTH_URL}/health`).then(r => r.ok),
+          fetch(`${UPSTREAM_URL}/health`).then(r => r.ok),
         ]);
-        if (g && o) break;
+        if (g && o && u) break;
       } catch { /* retry */ }
       await new Promise(r => setTimeout(r, 200));
     }
@@ -140,7 +163,7 @@ describe("ATHGatewayClient E2E — self-contained, real HTTP", () => {
     client = new ATHGatewayClient({ url: GATEWAY_URL, agentId: "https://gw-e2e.example.com/agent.json", privateKey });
   });
 
-  afterAll(() => { gatewayServer?.close(); oauthServer?.close(); });
+  afterAll(() => { gatewayServer?.close(); oauthServer?.close(); upstreamServer?.close(); });
 
   it("discovers the gateway", async () => {
     const d = await client.discover();
@@ -180,6 +203,10 @@ describe("ATHGatewayClient E2E — self-contained, real HTTP", () => {
 
     const user = await client.proxy<{ login: string }>("github", "GET", "/userinfo");
     expect(user.login).toBe("test-user");
+
+    // E2E-G1: proxy swapped in the provider bearer and did NOT leak the ATH token upstream.
+    expect(lastUpstreamAuth).toMatch(/^Bearer /);
+    expect(lastUpstreamAuth).not.toContain(tok.access_token);
 
     await client.revoke();
   });

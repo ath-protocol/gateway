@@ -16,6 +16,7 @@ export interface MockOAuthConfig {
   clientId?: string;
   clientSecret?: string;
   baseUrl?: string;
+  additionalClients?: { clientId: string; clientSecret: string }[];
 }
 
 export function createMockOAuthServer(config: MockOAuthConfig = {}) {
@@ -26,6 +27,11 @@ export function createMockOAuthServer(config: MockOAuthConfig = {}) {
 
   const clients = new Map<string, { client_secret: string; redirect_uris: string[] }>();
   clients.set(CLIENT_ID, { client_secret: CLIENT_SECRET, redirect_uris: [] });
+  if (config.additionalClients) {
+    for (const c of config.additionalClients) {
+      clients.set(c.clientId, { client_secret: c.clientSecret, redirect_uris: [] });
+    }
+  }
 
   const codes = new Map<string, {
     client_id: string;

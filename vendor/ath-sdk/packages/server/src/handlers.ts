@@ -20,6 +20,7 @@ import { generateCredentials, hashSecret } from "./registry.js";
 import { intersectScopes } from "./scopes.js";
 import type { TokenStore } from "./tokens.js";
 import type { SessionStore } from "./sessions.js";
+import { InMemoryProviderTokenStore, type ProviderTokenStore } from "./provider-tokens.js";
 
 export interface ATHHandlerRequest {
   method: string;
@@ -59,6 +60,12 @@ export interface ATHHandlerDeps {
   registry: AgentRegistry;
   tokenStore: TokenStore;
   sessionStore: SessionStore;
+  /**
+   * Storage for upstream OAuth tokens. Optional for backwards compatibility —
+   * defaults to `InMemoryProviderTokenStore`. Pass an injected store to share
+   * provider tokens with `createProxyHandler` or across server replicas.
+   */
+  providerTokenStore?: ProviderTokenStore;
   config: ATHHandlerConfig;
 }
 
@@ -90,10 +97,9 @@ export interface ATHHandlers {
 
 export function createATHHandlers(deps: ATHHandlerDeps): ATHHandlers {
   const { registry, tokenStore, sessionStore, config } = deps;
+  const providerTokenStore = deps.providerTokenStore ?? new InMemoryProviderTokenStore();
   const tokenExpiry = config.tokenExpirySeconds || 3600;
   const sessionExpiry = config.sessionExpirySeconds || 600;
-
-  const providerTokens = new Map<string, { access_token: string; refresh_token?: string }>();
 
   return {
     async register(req): Promise<ATHHandlerResponse> {
@@ -154,12 +160,25 @@ export function createATHHandlers(deps: ATHHandlerDeps): ATHHandlers {
         return { status: 400, body: { code: "AGENT_NOT_REGISTERED", message: "Missing client_id" } };
       }
 
+      if (!body.state) {
+        return { status: 400, body: { code: "STATE_MISMATCH", message: "Missing required state parameter" } };
+      }
+
       const agent = await registry.get(body.client_id);
       if (!agent) {
         return { status: 403, body: { code: "AGENT_NOT_REGISTERED", message: "Agent not registered" } };
       }
       if (agent.agent_status !== "approved") {
         return { status: 403, body: { code: "AGENT_UNAPPROVED", message: "Agent not approved" } };
+      }
+
+      if (body.user_redirect_uri && agent.redirect_uris.length > 0) {
+        if (!agent.redirect_uris.includes(body.user_redirect_uri)) {
+          return { status: 400, body: { code: "INVALID_ATTESTATION", message: "user_redirect_uri does not match any registered redirect_uris" } };
+        }
+      }
+      if (body.user_redirect_uri && agent.redirect_uris.length === 0) {
+        return { status: 400, body: { code: "INVALID_ATTESTATION", message: "Agent registered without redirect_uris; user_redirect_uri is not allowed" } };
       }
 
       const attestResult = await verifyAttestation(body.agent_attestation, {
@@ -244,9 +263,10 @@ export function createATHHandlers(deps: ATHHandlerDeps): ATHHandlers {
         });
 
         const connectionId = `native_${crypto.randomBytes(8).toString("hex")}`;
-        providerTokens.set(connectionId, {
+        await providerTokenStore.set(connectionId, {
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token,
+          scope: tokens.scope,
         });
 
         const consentedScopes = tokens.scope
@@ -280,6 +300,10 @@ export function createATHHandlers(deps: ATHHandlerDeps): ATHHandlers {
         return { status: 400, body: { code: "AGENT_NOT_REGISTERED", message: "Missing credentials" } };
       }
 
+      if (!body.agent_attestation) {
+        return { status: 400, body: { code: "INVALID_ATTESTATION", message: "Missing agent_attestation" } };
+      }
+
       const agent = await registry.get(body.client_id);
       if (!agent) {
         return { status: 403, body: { code: "AGENT_NOT_REGISTERED", message: "Agent not registered" } };
@@ -287,6 +311,17 @@ export function createATHHandlers(deps: ATHHandlerDeps): ATHHandlers {
 
       if (hashSecret(body.client_secret) !== agent.client_secret_hash) {
         return { status: 401, body: { code: "AGENT_NOT_REGISTERED", message: "Invalid credentials" } };
+      }
+
+      const attestResult = await verifyAttestation(body.agent_attestation, {
+        audience: config.audience,
+        skipSignatureVerification: config.skipAttestationVerification,
+      });
+      if (!attestResult.valid) {
+        return { status: 401, body: { code: "INVALID_ATTESTATION", message: attestResult.error } };
+      }
+      if (attestResult.agentId !== agent.agent_id) {
+        return { status: 401, body: { code: "AGENT_IDENTITY_MISMATCH", message: "Attestation sub does not match registered agent_id" } };
       }
 
       const session = await sessionStore.get(body.ath_session_id);
@@ -349,6 +384,17 @@ export function createATHHandlers(deps: ATHHandlerDeps): ATHHandlers {
       }
 
       if (body.client_id) {
+        if (!body.client_secret) {
+          return { status: 400, body: { code: "AGENT_NOT_REGISTERED", message: "Missing client_secret (required for agent-initiated revocation)" } };
+        }
+        const agent = await registry.get(body.client_id);
+        if (!agent) {
+          return { status: 403, body: { code: "AGENT_NOT_REGISTERED", message: "Agent not registered" } };
+        }
+        if (hashSecret(body.client_secret) !== agent.client_secret_hash) {
+          return { status: 401, body: { code: "AGENT_NOT_REGISTERED", message: "Invalid credentials" } };
+        }
+
         const bound = await tokenStore.get(body.token);
         if (bound && bound.client_id !== body.client_id) {
           return { status: 403, body: { code: "AGENT_IDENTITY_MISMATCH", message: "Token does not belong to this agent" } };
@@ -357,7 +403,7 @@ export function createATHHandlers(deps: ATHHandlerDeps): ATHHandlers {
 
       const revoked = await tokenStore.revoke(body.token);
       if (!revoked) {
-        return { status: 400, body: { code: "TOKEN_INVALID", message: "Token not found" } };
+        return { status: 200, body: { message: "Token revoked" } };
       }
 
       return { status: 200, body: { message: "Token revoked" } };
