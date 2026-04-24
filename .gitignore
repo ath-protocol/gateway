@@ -1,11 +1,6 @@
 node_modules/
 dist/
 
-# Vendored SDK build artifacts (rebuilt on install)
-vendor/ath-sdk/node_modules/
-vendor/ath-sdk/packages/*/node_modules/
-vendor/ath-sdk/packages/*/dist/
-
 # Environment
 .env
 .env.local

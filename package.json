@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Standalone ATH gateway — multi-tenant, user accounts, admin-controlled providers. Uses @ath-protocol/server SDK for protocol primitives.",
   "scripts": {
+    "preinstall": "node scripts/patch-sdk.cjs",
     "build": "tsc",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",

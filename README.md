@@ -7,6 +7,8 @@
 ## 快速开始
 
 ```bash
+git clone --recurse-submodules https://github.com/ath-protocol/gateway.git
+cd gateway
 pnpm install
 pnpm run dev
 ```
@@ -102,7 +104,7 @@ src/
 ├── discovery/          # .well-known 端点 + 缓存
 └── ui/                 # 管理仪表盘 Web UI
 vendor/
-├── ath-sdk/            # @ath-protocol/server + types（来自 github.com/ath-protocol/typescript-sdk）
+├── ath-sdk/            # git submodule → github.com/ath-protocol/typescript-sdk
 └── mock-oauth/         # 用于 E2E 测试的模拟 OAuth2 服务器
 ```
 

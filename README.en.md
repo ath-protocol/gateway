@@ -7,6 +7,8 @@ Standalone [ATH (Agent Trust Handshake)](https://github.com/ath-protocol/agent-t
 ## Quick start
 
 ```bash
+git clone --recurse-submodules https://github.com/ath-protocol/gateway.git
+cd gateway
 pnpm install
 pnpm run dev
 ```
@@ -102,7 +104,7 @@ src/
 ├── discovery/          # .well-known endpoint + cache
 └── ui/                 # Dashboard web UI
 vendor/
-├── ath-sdk/            # @ath-protocol/server + types (from github.com/ath-protocol/typescript-sdk)
+├── ath-sdk/            # git submodule → github.com/ath-protocol/typescript-sdk
 └── mock-oauth/         # Mock OAuth2 server for E2E tests
 ```
 
