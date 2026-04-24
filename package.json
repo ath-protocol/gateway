@@ -5,11 +5,13 @@
   "type": "module",
   "description": "Standalone ATH gateway — multi-tenant, user accounts, admin-controlled providers. Uses @ath-protocol/server SDK for protocol primitives.",
   "scripts": {
+    "preinstall": "node scripts/patch-sdk.cjs",
     "build": "tsc",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "test:e2e": "vitest run __tests__/e2e"
+    "test:e2e": "vitest run tests/e2e",
+    "test:e2e:direct-oauth": "vitest run tests/e2e/full-flow.test.ts tests/e2e/real-oauth.test.ts"
   },
   "dependencies": {
     "@ath-protocol/server": "file:vendor/ath-sdk/packages/server",

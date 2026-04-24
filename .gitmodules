@@ -1,0 +1,3 @@
+[submodule "vendor/ath-sdk"]
+	path = vendor/ath-sdk
+	url = https://github.com/ath-protocol/typescript-sdk.git

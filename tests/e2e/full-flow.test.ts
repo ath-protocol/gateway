@@ -11,10 +11,18 @@ import { providerStore } from "../../src/providers/store.js";
 import { userStore } from "../../src/users/store.js";
 import { createSessionToken } from "../../src/users/middleware.js";
 import * as jose from "jose";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { clearJtiReplayStore } from "../../src/auth/jti-replay.js";
+import {
+  startDirectOauthHarness,
+  completeOAuthConsentViaProvider,
+  applyGithubDirectProvider,
+  type DirectOauthHarness,
+} from "./direct-oauth-harness.js";
 
-const BASE = "http://localhost";
+let directHarness: DirectOauthHarness | null = null;
 
 function resetProviders() {
   const configFile = path.join(process.cwd(), "providers.json");
@@ -51,23 +59,41 @@ async function req(method: string, path: string, body?: unknown, headers?: Recor
   return app.request(path, init);
 }
 
-async function generateAttestation(agentId: string): Promise<string> {
+function gatewayBase(): string {
+  return directHarness?.gatewayUrl ?? "http://localhost:3000";
+}
+
+async function generateAttestation(agentId: string, audience?: string): Promise<string> {
   const { privateKey } = await jose.generateKeyPair("ES256");
   return new jose.SignJWT({ capabilities: [] })
     .setProtectedHeader({ alg: "ES256", kid: "test-key" })
     .setIssuer(agentId)
     .setSubject(agentId)
-    .setAudience("http://localhost:3000")
+    .setAudience(audience ?? gatewayBase())
+    .setJti(crypto.randomUUID())
     .setIssuedAt()
     .setExpirationTime("1h")
     .sign(privateKey);
 }
+
+/** Direct OAuth + real provider token exchange (standalone OAuth server only; no gateway OAuth mock). */
+beforeAll(async () => {
+  directHarness = await startDirectOauthHarness({ gatewayPort: 13111, oauthPort: 14111 });
+  process.env.ATH_PUBLIC_GATEWAY_URL = "http://localhost:3000";
+});
+
+afterAll(async () => {
+  await directHarness?.stop();
+  directHarness = null;
+  delete process.env.ATH_PUBLIC_GATEWAY_URL;
+});
 
 describe("E2E-0: User Authentication", () => {
   beforeAll(async () => {
     agentStore.clear();
     tokenStore.clear();
     sessionStore.clear();
+    clearJtiReplayStore();
     resetProviders();
     userStore.clear();
     authToken = "";
@@ -110,7 +136,9 @@ describe("E2E-1: Agent registers and accesses a service (Happy Path)", () => {
     agentStore.clear();
     tokenStore.clear();
     sessionStore.clear();
+    clearJtiReplayStore();
     resetProviders();
+    applyGithubDirectProvider(directHarness!.oauthUrl);
     await ensureTestUser();
   });
 
@@ -118,6 +146,8 @@ describe("E2E-1: Agent registers and accesses a service (Happy Path)", () => {
   let clientId: string;
   let clientSecret: string;
   let sessionId: string;
+  let authorizationUrl: string;
+  let oauthAuthCode: string;
   let accessToken: string;
 
   it("Step 1: Discovery returns supported providers (public, no auth)", async () => {
@@ -137,7 +167,7 @@ describe("E2E-1: Agent registers and accesses a service (Happy Path)", () => {
       developer: { name: "Test Dev", id: "dev-test-001" },
       requested_providers: [{ provider_id: "github", scopes: ["repo", "read:user"] }],
       purpose: "E2E test",
-      redirect_uris: ["http://localhost:3000/ath/callback"],
+      redirect_uris: [directHarness!.agentCallbackUrl],
     });
     expect(res.status).toBe(201);
     const data = await res.json() as any;
@@ -150,39 +180,42 @@ describe("E2E-1: Agent registers and accesses a service (Happy Path)", () => {
     clientSecret = data.client_secret;
   });
 
-  it("Step 3: Agent initiates authorization flow", async () => {
+  it("Step 3: Agent initiates authorization (real provider URL, not gateway mock)", async () => {
     const attestation = await generateAttestation(agentId);
     const res = await req("POST", "/ath/authorize", {
       client_id: clientId,
       agent_attestation: attestation,
       provider_id: "github",
       scopes: ["repo", "read:user"],
-      user_redirect_uri: "http://localhost:3000/ath/callback",
+      user_redirect_uri: directHarness!.agentCallbackUrl,
       state: "test-state-123",
     });
     expect(res.status).toBe(200);
-    const data = await res.json() as any;
-    expect(data.authorization_url).toBeTruthy();
+    const data = await res.json() as { authorization_url: string; ath_session_id: string };
+    expect(data.authorization_url).toContain(directHarness!.oauthUrl);
+    expect(data.authorization_url).not.toContain("/ui/mock-consent");
     expect(data.ath_session_id).toBeTruthy();
     sessionId = data.ath_session_id;
+    authorizationUrl = data.authorization_url;
   });
 
-  it("Step 4: Simulate user consent via mock consent page", async () => {
+  it("Step 4: User completes consent at OAuth provider", async () => {
     const session = await sessionStore.get(sessionId);
     expect(session).toBeTruthy();
 
-    const callbackRes = await req("GET", `/ath/callback?code=mock_code_e2e&state=${session!.oauth_state}`);
-    expect(callbackRes.status).toBe(302);
-    const location = callbackRes.headers.get("location") || "";
-    expect(location).toContain("success=true");
+    const { code } = await completeOAuthConsentViaProvider(authorizationUrl, req);
+    expect(code.length).toBeGreaterThan(10);
+    oauthAuthCode = code;
   });
 
   it("Step 5: Agent exchanges code for ATH token with scope intersection", async () => {
+    const tokenAttestation = await generateAttestation(agentId, `${gatewayBase()}/ath/token`);
     const res = await req("POST", "/ath/token", {
       grant_type: "authorization_code",
       client_id: clientId,
       client_secret: clientSecret,
-      code: "mock_code_e2e",
+      agent_attestation: tokenAttestation,
+      code: oauthAuthCode,
       ath_session_id: sessionId,
     });
     expect(res.status).toBe(200);
@@ -197,14 +230,14 @@ describe("E2E-1: Agent registers and accesses a service (Happy Path)", () => {
   });
 
   it("Step 6: Agent calls proxy API with ATH token", async () => {
-    const res = await req("GET", "/ath/proxy/github/user", undefined, {
+    const res = await req("GET", "/ath/proxy/github/userinfo", undefined, {
       Authorization: `Bearer ${accessToken}`,
       "X-ATH-Agent-ID": agentId,
     });
     expect(res.status).toBe(200);
     const data = await res.json() as any;
-    expect(data.mock).toBe(true);
-    expect(data.provider).toBe("github");
+    expect(data.login).toBe("test-user");
+    expect(data.email).toBe("test@example.com");
   });
 
   afterAll(() => {
@@ -219,7 +252,9 @@ describe("E2E-2: Trusted Handshake Enforcement (Scope Restriction)", () => {
     agentStore.clear();
     tokenStore.clear();
     sessionStore.clear();
+    clearJtiReplayStore();
     resetProviders();
+    applyGithubDirectProvider(directHarness!.oauthUrl);
     await ensureTestUser();
   });
 
@@ -253,7 +288,6 @@ describe("E2E-2: Trusted Handshake Enforcement (Scope Restriction)", () => {
       agent_attestation: attestation,
       provider_id: "github",
       scopes: ["repo", "admin:org"],
-      user_redirect_uri: "http://localhost/callback",
       state: "test",
     });
     expect(res.status).toBe(403);
@@ -268,7 +302,6 @@ describe("E2E-2: Trusted Handshake Enforcement (Scope Restriction)", () => {
       agent_attestation: attestation,
       provider_id: "github",
       scopes: ["repo"],
-      user_redirect_uri: "http://localhost:3000/ath/callback",
       state: "test",
     });
     expect(res.status).toBe(200);
@@ -286,6 +319,8 @@ describe("E2E-2: Trusted Handshake Enforcement (Scope Restriction)", () => {
 describe("E2E-3: Unapproved Agent Rejected", () => {
   beforeAll(async () => {
     agentStore.clear();
+    clearJtiReplayStore();
+    applyGithubDirectProvider(directHarness!.oauthUrl);
     await ensureTestUser();
   });
 
@@ -296,7 +331,6 @@ describe("E2E-3: Unapproved Agent Rejected", () => {
       agent_attestation: attestation,
       provider_id: "github",
       scopes: ["repo"],
-      user_redirect_uri: "http://localhost/callback",
       state: "test",
     });
     expect(res.status).toBe(403);
@@ -314,7 +348,9 @@ describe("E2E-4: Token Revocation", () => {
     agentStore.clear();
     tokenStore.clear();
     sessionStore.clear();
+    clearJtiReplayStore();
     resetProviders();
+    applyGithubDirectProvider(directHarness!.oauthUrl);
     await ensureTestUser();
   });
 
@@ -343,25 +379,26 @@ describe("E2E-4: Token Revocation", () => {
       agent_attestation: authAttestation,
       provider_id: "github",
       scopes: ["repo"],
-      user_redirect_uri: "http://localhost:3000/ath/callback",
       state: "test",
     });
-    const authData = await authRes.json() as any;
+    const authData = await authRes.json() as { authorization_url: string; ath_session_id: string };
+    expect(authData.authorization_url).toContain(directHarness!.oauthUrl);
 
-    const session = await sessionStore.get(authData.ath_session_id);
-    await req("GET", `/ath/callback?code=mock_code&state=${session!.oauth_state}`);
+    const { code } = await completeOAuthConsentViaProvider(authData.authorization_url, req);
 
+    const tokenAttestation = await generateAttestation(agentId, `${gatewayBase()}/ath/token`);
     const tokenRes = await req("POST", "/ath/token", {
       grant_type: "authorization_code",
       client_id: clientId,
       client_secret: clientSecret,
-      code: "mock_code",
+      agent_attestation: tokenAttestation,
+      code,
       ath_session_id: authData.ath_session_id,
     });
     const tokenData = await tokenRes.json() as any;
     accessToken = tokenData.access_token;
 
-    const proxyRes = await req("GET", "/ath/proxy/github/user", undefined, {
+    const proxyRes = await req("GET", "/ath/proxy/github/userinfo", undefined, {
       Authorization: `Bearer ${accessToken}`,
     });
     expect(proxyRes.status).toBe(200);
@@ -370,13 +407,14 @@ describe("E2E-4: Token Revocation", () => {
   it("Revoke token", async () => {
     const res = await req("POST", "/ath/revoke", {
       client_id: clientId,
+      client_secret: clientSecret,
       token: accessToken,
     });
     expect(res.status).toBe(200);
   });
 
   it("Revoked token is rejected", async () => {
-    const res = await req("GET", "/ath/proxy/github/user", undefined, {
+    const res = await req("GET", "/ath/proxy/github/userinfo", undefined, {
       Authorization: `Bearer ${accessToken}`,
     });
     expect(res.status).toBe(401);
@@ -396,7 +434,9 @@ describe("E2E-5: Proxy rejects mismatched agent/provider", () => {
     agentStore.clear();
     tokenStore.clear();
     sessionStore.clear();
+    clearJtiReplayStore();
     resetProviders();
+    applyGithubDirectProvider(directHarness!.oauthUrl);
     await ensureTestUser();
   });
 
@@ -421,19 +461,20 @@ describe("E2E-5: Proxy rejects mismatched agent/provider", () => {
       agent_attestation: authAttestation,
       provider_id: "github",
       scopes: ["repo"],
-      user_redirect_uri: "http://localhost:3000/ath/callback",
       state: "test",
     });
-    const authData = await authRes.json() as any;
+    const authData = await authRes.json() as { authorization_url: string; ath_session_id: string };
+    expect(authData.authorization_url).toContain(directHarness!.oauthUrl);
 
-    const session = await sessionStore.get(authData.ath_session_id);
-    await req("GET", `/ath/callback?code=mock_code&state=${session!.oauth_state}`);
+    const { code } = await completeOAuthConsentViaProvider(authData.authorization_url, req);
 
+    const tokenAttestation = await generateAttestation(agentId, `${gatewayBase()}/ath/token`);
     const tokenRes = await req("POST", "/ath/token", {
       grant_type: "authorization_code",
       client_id: regData.client_id,
       client_secret: regData.client_secret,
-      code: "mock_code",
+      agent_attestation: tokenAttestation,
+      code,
       ath_session_id: authData.ath_session_id,
     });
     const tokenData = await tokenRes.json() as any;
@@ -450,7 +491,7 @@ describe("E2E-5: Proxy rejects mismatched agent/provider", () => {
   });
 
   it("Token with wrong agent ID header is rejected", async () => {
-    const res = await req("GET", "/ath/proxy/github/user", undefined, {
+    const res = await req("GET", "/ath/proxy/github/userinfo", undefined, {
       Authorization: `Bearer ${accessToken}`,
       "X-ATH-Agent-ID": "https://different-agent.example.com/agent.json",
     });
@@ -475,6 +516,7 @@ describe("E2E-6: Cross-tenant isolation", () => {
     agentStore.clear();
     tokenStore.clear();
     sessionStore.clear();
+    clearJtiReplayStore();
     userStore.clear();
 
     const userA = await userStore.create("alice", "passA", "user");

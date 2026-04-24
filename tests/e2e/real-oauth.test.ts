@@ -13,8 +13,10 @@ import { providerStore } from "../../src/providers/store.js";
 import { userStore } from "../../src/users/store.js";
 import { createSessionToken } from "../../src/users/middleware.js";
 import * as jose from "jose";
+import crypto from "node:crypto";
 import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
+import { clearJtiReplayStore } from "../../src/auth/jti-replay.js";
 
 let gatewayServer: ServerType;
 let oauthServer: ServerType;
@@ -25,13 +27,14 @@ const OAUTH_URL = `http://localhost:${OAUTH_PORT}`;
 
 let authToken: string;
 
-async function generateAttestation(agentId: string): Promise<string> {
+async function generateAttestation(agentId: string, audience?: string): Promise<string> {
   const { privateKey } = await jose.generateKeyPair("ES256");
   return new jose.SignJWT({ capabilities: [] })
     .setProtectedHeader({ alg: "ES256", kid: "test-key" })
     .setIssuer(agentId)
     .setSubject(agentId)
-    .setAudience(GATEWAY_URL)
+    .setAudience(audience ?? GATEWAY_URL)
+    .setJti(crypto.randomUUID())
     .setIssuedAt()
     .setExpirationTime("1h")
     .sign(privateKey);
@@ -53,10 +56,12 @@ async function jsonReq(method: string, url: string, body?: unknown, headers?: Re
 describe("E2E with Real OAuth Server", () => {
   beforeAll(async () => {
     process.env.ATH_GATEWAY_HOST = GATEWAY_URL;
+    process.env.ATH_PUBLIC_GATEWAY_URL = GATEWAY_URL;
 
     agentStore.clear();
     tokenStore.clear();
     sessionStore.clear();
+    clearJtiReplayStore();
     oauthBridge.clearTokens();
     providerStore.clearCache();
     userStore.clear();
@@ -91,6 +96,7 @@ describe("E2E with Real OAuth Server", () => {
   });
 
   afterAll(async () => {
+    delete process.env.ATH_PUBLIC_GATEWAY_URL;
     gatewayServer?.close();
     oauthServer?.close();
     agentStore.clear();
@@ -189,10 +195,12 @@ describe("E2E with Real OAuth Server", () => {
   });
 
   it("7. Agent exchanges code for ATH token — real OAuth token exchange happens", async () => {
+    const tokenAttestation = await generateAttestation(agentId, `${GATEWAY_URL}/ath/token`);
     const res = await jsonReq("POST", `${GATEWAY_URL}/ath/token`, {
       grant_type: "authorization_code",
       client_id: clientId,
       client_secret: clientSecret,
+      agent_attestation: tokenAttestation,
       code: "real_oauth_exchange",
       ath_session_id: sessionId,
     });
@@ -242,6 +250,7 @@ describe("E2E with Real OAuth Server", () => {
   it("11. Token revocation works — subsequent proxy calls fail", async () => {
     const revokeRes = await jsonReq("POST", `${GATEWAY_URL}/ath/revoke`, {
       client_id: clientId,
+      client_secret: clientSecret,
       token: accessToken,
     });
     expect(revokeRes.status).toBe(200);

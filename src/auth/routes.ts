@@ -13,6 +13,7 @@ import { ATHError, ATHErrorCode } from "../types.js";
 import type { AuthorizationRequest, TokenExchangeRequest, AppEnv } from "../types.js";
 import { loadConfig } from "../config.js";
 import { hashSecret } from "../utils.js";
+import { assertFreshJti } from "./jti-replay.js";
 
 export const authRoutes = new Hono<AppEnv>();
 
@@ -22,6 +23,10 @@ authRoutes.post("/authorize", async (c) => {
   const tenantId = c.get("userId") as string;
   const config = loadConfig();
 
+  if (!body.state) {
+    throw new ATHError(ATHErrorCode.STATE_MISMATCH, "Missing required state parameter", 400);
+  }
+
   const agent = await agentStore.getScoped(body.client_id, tenantId);
   if (!agent) {
     throw new ATHError(ATHErrorCode.AGENT_NOT_REGISTERED, "Agent not registered", 403);
@@ -30,12 +35,34 @@ authRoutes.post("/authorize", async (c) => {
     throw new ATHError(ATHErrorCode.AGENT_UNAPPROVED, "Agent not approved", 403);
   }
 
+  const jtiCheck = assertFreshJti(body.agent_attestation);
+  if (!jtiCheck.ok) {
+    throw new ATHError(ATHErrorCode.INVALID_ATTESTATION, jtiCheck.error, 401);
+  }
+
   const attestResult = await verifyAttestation(body.agent_attestation, {
-    audience: config.gatewayUrl,
+    audience: config.publicGatewayUrl,
     skipSignatureVerification: true,
   });
   if (!attestResult.valid) {
     throw new ATHError(ATHErrorCode.INVALID_ATTESTATION, attestResult.error || "Invalid attestation", 401);
+  }
+
+  // redirect_uri validation per protocol spec
+  if (agent.redirect_uris && agent.redirect_uris.length > 0) {
+    if (body.user_redirect_uri && !agent.redirect_uris.includes(body.user_redirect_uri)) {
+      throw new ATHError(
+        ATHErrorCode.INVALID_ATTESTATION,
+        "user_redirect_uri does not match any registered redirect_uris",
+        400,
+      );
+    }
+  } else if (body.user_redirect_uri) {
+    throw new ATHError(
+      ATHErrorCode.INVALID_ATTESTATION,
+      "Agent has no registered redirect_uris; user_redirect_uri must not be provided",
+      400,
+    );
   }
 
   const providerApproval = agent.approved_providers.find((p) => p.provider_id === body.provider_id);
@@ -157,6 +184,10 @@ authRoutes.post("/token", async (c) => {
   const tenantId = c.get("userId") as string;
   const config = loadConfig();
 
+  if (!body.agent_attestation) {
+    throw new ATHError(ATHErrorCode.INVALID_ATTESTATION, "Missing required agent_attestation", 400);
+  }
+
   const agent = await agentStore.getScoped(body.client_id, tenantId);
   if (!agent) {
     throw new ATHError(ATHErrorCode.AGENT_NOT_REGISTERED, "Agent not registered", 403);
@@ -165,6 +196,27 @@ authRoutes.post("/token", async (c) => {
   const secretHash = hashSecret(body.client_secret);
   if (secretHash !== agent.client_secret_hash) {
     throw new ATHError(ATHErrorCode.AGENT_NOT_REGISTERED, "Invalid client credentials", 401);
+  }
+
+  const jtiCheck = assertFreshJti(body.agent_attestation);
+  if (!jtiCheck.ok) {
+    throw new ATHError(ATHErrorCode.INVALID_ATTESTATION, jtiCheck.error, 401);
+  }
+
+  const tokenEndpointUrl = `${config.publicGatewayUrl}/ath/token`;
+  const attestResult = await verifyAttestation(body.agent_attestation, {
+    audience: tokenEndpointUrl,
+    skipSignatureVerification: true,
+  });
+  if (!attestResult.valid) {
+    throw new ATHError(ATHErrorCode.INVALID_ATTESTATION, attestResult.error || "Invalid attestation", 401);
+  }
+  if (attestResult.agentId !== agent.agent_id) {
+    throw new ATHError(
+      ATHErrorCode.AGENT_IDENTITY_MISMATCH,
+      "Attestation sub claim does not match registered agent_id",
+      403,
+    );
   }
 
   const session = await sessionStore.get(body.ath_session_id);
@@ -238,11 +290,33 @@ authRoutes.post("/token", async (c) => {
 
 // POST /ath/revoke — Revoke an ATH token
 authRoutes.post("/revoke", async (c) => {
-  const { client_id, token } = (await c.req.json()) as { client_id: string; token: string };
+  const { client_id, client_secret, token } = (await c.req.json()) as {
+    client_id?: string;
+    client_secret?: string;
+    token: string;
+  };
   const tenantId = c.get("userId") as string;
 
   if (!token) {
     throw new ATHError(ATHErrorCode.TOKEN_INVALID, "Missing token", 400);
+  }
+
+  if (client_id) {
+    if (!client_secret) {
+      throw new ATHError(
+        ATHErrorCode.AGENT_NOT_REGISTERED,
+        "client_secret is required when client_id is provided (RFC 7009)",
+        401,
+      );
+    }
+    const agent = await agentStore.getScoped(client_id, tenantId);
+    if (!agent) {
+      throw new ATHError(ATHErrorCode.AGENT_NOT_REGISTERED, "Agent not registered", 403);
+    }
+    const secretHash = hashSecret(client_secret);
+    if (secretHash !== agent.client_secret_hash) {
+      throw new ATHError(ATHErrorCode.AGENT_NOT_REGISTERED, "Invalid client credentials", 401);
+    }
   }
 
   const bound = await tokenStore.get(token);

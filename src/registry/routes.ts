@@ -10,6 +10,7 @@ import { ATHError, ATHErrorCode } from "../types.js";
 import type { AgentRegistrationRequest, RegisteredAgent, AppEnv } from "../types.js";
 import { loadConfig } from "../config.js";
 import { hashSecret, generateCredentials } from "../utils.js";
+import { assertFreshJti } from "../auth/jti-replay.js";
 
 export const registryRoutes = new Hono<AppEnv>();
 
@@ -35,9 +36,14 @@ registryRoutes.post("/register", async (c) => {
     );
   }
 
+  const jtiCheck = assertFreshJti(body.agent_attestation);
+  if (!jtiCheck.ok) {
+    throw new ATHError(ATHErrorCode.INVALID_ATTESTATION, jtiCheck.error, 401);
+  }
+
   const config = loadConfig();
   const attestResult = await verifyAttestation(body.agent_attestation, {
-    audience: config.gatewayUrl,
+    audience: config.publicGatewayUrl,
     skipSignatureVerification: true,
   });
   if (!attestResult.valid) {

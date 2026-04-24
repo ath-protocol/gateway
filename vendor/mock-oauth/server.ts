@@ -69,6 +69,22 @@ app.post("/clients/register", async (c) => {
   return c.json({ client_id: clientId, client_secret: clientSecret });
 });
 
+/** E2E: register an extra redirect_uri for an existing client (e.g. gateway on a random port). */
+app.post("/clients/redirect-uris", async (c) => {
+  const body = await c.req.json() as { client_id?: string; redirect_uri?: string };
+  if (!body.client_id || !body.redirect_uri) {
+    return c.json({ error: "invalid_request", message: "client_id and redirect_uri required" }, 400);
+  }
+  const client = clients.get(body.client_id);
+  if (!client) {
+    return c.json({ error: "invalid_client" }, 404);
+  }
+  if (!client.redirect_uris.includes(body.redirect_uri)) {
+    client.redirect_uris.push(body.redirect_uri);
+  }
+  return c.json({ ok: true, redirect_uris: client.redirect_uris });
+});
+
 // ── OAuth2 Authorization Endpoint ─────────────────────────────────
 
 app.get("/authorize", async (c) => {

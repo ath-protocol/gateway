@@ -11,6 +11,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { invalidateDiscoveryCache } from "../discovery/cache.js";
 
 export interface ProviderConfig {
   display_name: string;
@@ -80,6 +81,7 @@ function load(): Record<string, ProviderConfig> {
 function save(providers: Record<string, ProviderConfig>): void {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(providers, null, 2), "utf-8");
   cache = providers;
+  invalidateDiscoveryCache();
 }
 
 export const providerStore = {
@@ -111,5 +113,6 @@ export const providerStore = {
 
   clearCache(): void {
     cache = null;
+    invalidateDiscoveryCache();
   },
 };
